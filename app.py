@@ -24,16 +24,16 @@ def fillBlanks():
         annualSalary = request.args.get('annual_salary')
         balance_401k = request.args.get('balance_401k')
         contribution = request.args.get('contribution')
-        employee_match = request.args.get('employee_match')  # Updated from 'match' to 'employee_match'
+        employee_match = request.args.get('employee_match')
         matchLimit = request.args.get('matchLimit')
         expectedRetirementAge = request.args.get('expectedRetirementAge')
-        lifeExepctancy = request.args.get('lifeExpectancy')
+        lifeExpectancy = request.args.get('lifeExpectancy')
         salaryIncrease = request.args.get('salaryIncrease')
         annualReturn = request.args.get('annualReturn')
         inflationRate = request.args.get('inflationRate')
 
         # Check if any of the parameters are missing
-        if not all([age, annualSalary, balance_401k, contribution, employee_match, matchLimit, expectedRetirementAge, lifeExepctancy, salaryIncrease, annualReturn, inflationRate]):
+        if not all([age, annualSalary, balance_401k, contribution, employee_match, matchLimit, expectedRetirementAge, lifeExpectancy, salaryIncrease, annualReturn, inflationRate]):
             return jsonify({'error': 'Missing required parameter(s).'}), 400
 
         # Convert inputs to proper types and handle invalid input types
@@ -44,8 +44,8 @@ def fillBlanks():
             contribution = float(contribution)
             employee_match = float(employee_match)  # Updated to match the new name
             matchLimit = float(matchLimit)
-            expectedRetirementAge = float(expectedRetirementAge)
-            lifeExepctancy = float(lifeExepctancy)
+            expectedRetirementAge = int(expectedRetirementAge)
+            lifeExpectancy = int(lifeExpectancy)
             salaryIncrease = float(salaryIncrease)
             annualReturn = float(annualReturn)
             inflationRate = float(inflationRate)
@@ -55,6 +55,14 @@ def fillBlanks():
         # Logical checks on the values
         if age < 0:
             return jsonify({'error': 'Age must be 0 or older.'}), 400
+        if expectedRetirementAge <= age:
+            return jsonify({'error': 'Retirement age must be greater than age.'}), 400
+        if lifeExpectancy < expectedRetirementAge:
+            return jsonify({'error': 'Life expectancy age must be greater than or equal to retirement age.'}), 400
+        if not annualSalary > 0:
+            return jsonify({'error': 'Annual salary must be greater than 0.'}), 400
+        if not balance_401k > 0:
+            return jsonify({'error': '401k balance must be greater than 0.'}), 400
         if not (0 <= contribution <= 100):
             return jsonify({'error': 'Contribution percentage must be between 0 and 100.'}), 400
         if not (0 <= employee_match <= 100):  # Updated here as well
@@ -72,7 +80,7 @@ def fillBlanks():
 
     except Exception as e:
         # Catch any unexpected errors
-        return jsonify({'error': f'An unexpected error occurred: {str(e)}'}), 500
+        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
 
 
 if __name__ == '__main__':
