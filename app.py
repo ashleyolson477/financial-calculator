@@ -79,7 +79,7 @@ def fillBlanks():
         inflation_rate = inflationRate
         salary_growth = salaryIncrease
 
-        # Project 401(k) growth
+        #401k growth up to retirement age
         for year in range(years_to_retirement):
             annualSalary *= (1 + salary_growth)
             user_contrib = annualSalary * contribution
@@ -87,49 +87,38 @@ def fillBlanks():
             total_annual_contrib = user_contrib + employer_contrib
             monthly_contrib = total_annual_contrib / 12
 
-            for _ in range(12):
+            #simulates compoudong of investments on monthly basis
+            for i in range(12):
                 balance_401k *= (1 + monthly_return)
                 balance_401k += monthly_contrib
 
+        #balance at retirement
         retirement_balance = balance_401k
 
-        # Present value of retirement balance
+        #current value of money
         purchasing_power = retirement_balance / ((1 + inflation_rate) ** years_to_retirement)
 
         # Withdrawal calculations
-        # 1. Fixed real (purchasing power) monthly withdrawal
-        if abs(annual_return - inflation_rate) < 1e-6:
+        #fixed real (purchasing power) monthly withdrawal
+        if abs(annual_return - inflation_rate) < 0.000001:
             real_annual_withdrawal = retirement_balance / retirement_years
         else:
             real_annual_withdrawal = retirement_balance * (annual_return - inflation_rate) / (
                 1 - ((1 + inflation_rate) / (1 + annual_return)) ** retirement_years)
 
         real_monthly_withdrawal = real_annual_withdrawal / 12
-        pv_real_monthly = real_monthly_withdrawal  # since it's already in today's dollars
-
-        # 2. Fixed nominal (non-inflation-adjusted) monthly withdrawal
+        
+        #fixed nominal (non-inflation-adjusted) monthly withdrawal
         nominal_annual_withdrawal = retirement_balance * annual_return / (1 - (1 / (1 + annual_return) ** retirement_years))
         nominal_monthly_withdrawal = nominal_annual_withdrawal / 12
 
-        # Present value of first and last nominal monthly withdrawals
+        #present value of first and last nominal monthly withdrawals
         pv_nominal_monthly_start = nominal_monthly_withdrawal / ((1 + inflation_rate) ** years_to_retirement)
         pv_nominal_monthly_end = nominal_monthly_withdrawal / ((1 + inflation_rate) ** (years_to_retirement + retirement_years - 1))
 
-        # 3. Fixed nominal annual withdrawal
+        #fixed nominal annual withdrawal
         pv_nominal_annual_start = nominal_annual_withdrawal / ((1 + inflation_rate) ** years_to_retirement)
         pv_nominal_annual_end = nominal_annual_withdrawal / ((1 + inflation_rate) ** (years_to_retirement + retirement_years - 1))
-
-
-        # Present value of full withdrawal streams in today's dollars
-        pv_real_stream = real_monthly_withdrawal * 12 * (1 - (1 / (1 + inflation_rate) ** retirement_years)) / inflation_rate
-        pv_nominal_stream_monthly = nominal_monthly_withdrawal * 12 * (1 - (1 / (1 + inflation_rate) ** retirement_years)) / inflation_rate
-        pv_nominal_stream_annual = nominal_annual_withdrawal * (1 - (1 / (1 + inflation_rate) ** retirement_years)) / inflation_rate
-      
-        # After projecting 401(k) growth
-        retirement_balance = balance_401k
-
-        purchasing_power = retirement_balance / ((1 + inflation_rate) ** years_to_retirement)  # ✅ add this if not already done
-
 
         response = {
             "Retirement Balance Summary": f"At the retirement age of {expectedRetirementAge}, the 401(k) balance will be ${retirement_balance:,.0f}, which is equivalent to ${purchasing_power:,.0f} in purchasing power today.",
