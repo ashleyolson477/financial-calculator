@@ -63,6 +63,17 @@
             </div>
             <button type="submit" class="btn btn-primary w-100">Submit</button>
         </form>
+        {% if message %}
+        <div id="result" class="mt-5">
+            <h3>Withdrawal Details:</h3>
+            <div id="responseMessage">
+                <p>{{ message["Fixed Purchasing Power Withdrawal"] }}</p>
+                <p>{{ message["Fixed Amount Monthly Withdrawal"] }}</p>
+                <p>{{ message["Fixed Amount Annual Withdrawal"] }}</p>
+            </div>
+        </div>
+        {% endif %}
+
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
