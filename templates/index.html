@@ -65,8 +65,9 @@
         </form>
         {% if message %}
         <div id="result" class="mt-5">
-            <h3>Withdrawal:</h3>
+            <h3>401k Summary:</h3>
             <div id="responseMessage">
+                <p>{{ message["Retirement Balance Summary"] }}</p>
                 <p>{{ message["Fixed Purchasing Power Withdrawal"] }}</p>
                 <p>{{ message["Fixed Amount Monthly Withdrawal"] }}</p>
                 <p>{{ message["Fixed Amount Annual Withdrawal"] }}</p>

@@ -1,4 +1,5 @@
 import math
+import os
 from flask import Flask, request, jsonify, render_template
 
 
@@ -29,7 +30,7 @@ def fillBlanks():
         try:
             age = int(age)
             annualSalary = float(annualSalary)
-            balance_401k = float(balance_401k)
+            balance_401k = float(balance_401k) if balance_401k else 0
             contribution = float(contribution)
             employee_match = float(employee_match)
             matchLimit = float(matchLimit)
@@ -62,55 +63,84 @@ def fillBlanks():
         if not (0 <= inflationRate <= 100):
             return jsonify({'error': 'Inflation rate percentage must be between 0 and 100.'}), 400
         
-        compound_growth = math.pow((1 + annualReturn/100/12), (expectedRetirementAge - age) * 12)
+        #percents to decimals
+        contribution = contribution / 100
+        employee_match = employee_match / 100
+        matchLimit = matchLimit / 100
+        annualReturn = annualReturn / 100
+        inflationRate = inflationRate / 100
+        salaryIncrease = salaryIncrease / 100
         
-        user_match = annualSalary * contribution
-        employer_match = min(contribution, matchLimit) * annualSalary
-        
-        monthly_contribution = (user_match + employer_match) / 12
-        monthly_return = annualReturn / 100 / 12
-        
-        #calculates the growth of the 401k balance up to retirement
-        for i in range(expectedRetirementAge - age):
-            annualSalary *= (1 + salaryIncrease / 100)
-            user_match = annualSalary * contribution
-            employee_match = min(contribution, matchLimit) * annualSalary
-            monthly_contribution = (user_match + employer_match) / 12
+        years_to_retirement = expectedRetirementAge - age
+        retirement_years = lifeExpectancy - expectedRetirementAge
 
-            balance_401k += monthly_contribution * 12
-            balance_401k *= (1 + annualReturn / 100)
+        annual_return = annualReturn
+        monthly_return = annual_return / 12
+        inflation_rate = inflationRate
+        salary_growth = salaryIncrease
 
-        total_balance = balance_401k
+        # Project 401(k) growth
+        for year in range(years_to_retirement):
+            annualSalary *= (1 + salary_growth)
+            user_contrib = annualSalary * contribution
+            employer_contrib = min(contribution, matchLimit) * employee_match * annualSalary
+            total_annual_contrib = user_contrib + employer_contrib
+            monthly_contrib = total_annual_contrib / 12
 
-        inflation_adjustment = math.pow(1 + inflationRate / 100, expectedRetirementAge - age)
-        purchasing_power = balance_401k / inflation_adjustment
-        
-        retirementYears = lifeExpectancy - expectedRetirementAge
-        retirementReturn = annualReturn / 100
-        retirementInflation = inflationRate / 100
-        
-        #calculates annual withdrawal if the retirement return equals the inflation rate, otehrwise does the bottom
-        if abs(retirementReturn - retirementInflation) < 0.000001:
-            annual_withdrawal = balance_401k / retirementYears
+            for _ in range(12):
+                balance_401k *= (1 + monthly_return)
+                balance_401k += monthly_contrib
+
+        retirement_balance = balance_401k
+
+        # Present value of retirement balance
+        purchasing_power = retirement_balance / ((1 + inflation_rate) ** years_to_retirement)
+
+        # Withdrawal calculations
+        # 1. Fixed real (purchasing power) monthly withdrawal
+        if abs(annual_return - inflation_rate) < 1e-6:
+            real_annual_withdrawal = retirement_balance / retirement_years
         else:
-            annual_withdrawal = balance_401k * (retirementReturn - retirementInflation) / (1 - math.pow((1 + retirementInflation) / (1 + retirementReturn), retirementYears))
-        
-        monthly_withdrawal = annual_withdrawal / 12
-        initial_monthly_withdrawal = monthly_withdrawal
-        
-        for year in range(retirementYears):
-            monthly_withdrawal *= (1 + inflationRate / 100)
-            balance_401k -= monthly_withdrawal * 12
+            real_annual_withdrawal = retirement_balance * (annual_return - inflation_rate) / (
+                1 - ((1 + inflation_rate) / (1 + annual_return)) ** retirement_years)
 
-        deducted_balance = balance_401k
+        real_monthly_withdrawal = real_annual_withdrawal / 12
+        pv_real_monthly = real_monthly_withdrawal  # since it's already in today's dollars
+
+        # 2. Fixed nominal (non-inflation-adjusted) monthly withdrawal
+        nominal_annual_withdrawal = retirement_balance * annual_return / (1 - (1 / (1 + annual_return) ** retirement_years))
+        nominal_monthly_withdrawal = nominal_annual_withdrawal / 12
+
+        # Present value of first and last nominal monthly withdrawals
+        pv_nominal_monthly_start = nominal_monthly_withdrawal / ((1 + inflation_rate) ** years_to_retirement)
+        pv_nominal_monthly_end = nominal_monthly_withdrawal / ((1 + inflation_rate) ** (years_to_retirement + retirement_years - 1))
+
+        # 3. Fixed nominal annual withdrawal
+        pv_nominal_annual_start = nominal_annual_withdrawal / ((1 + inflation_rate) ** years_to_retirement)
+        pv_nominal_annual_end = nominal_annual_withdrawal / ((1 + inflation_rate) ** (years_to_retirement + retirement_years - 1))
+
+
+        # Present value of full withdrawal streams in today's dollars
+        pv_real_stream = real_monthly_withdrawal * 12 * (1 - (1 / (1 + inflation_rate) ** retirement_years)) / inflation_rate
+        pv_nominal_stream_monthly = nominal_monthly_withdrawal * 12 * (1 - (1 / (1 + inflation_rate) ** retirement_years)) / inflation_rate
+        pv_nominal_stream_annual = nominal_annual_withdrawal * (1 - (1 / (1 + inflation_rate) ** retirement_years)) / inflation_rate
+      
+        # After projecting 401(k) growth
+        retirement_balance = balance_401k
+
+        purchasing_power = retirement_balance / ((1 + inflation_rate) ** years_to_retirement)  # ✅ add this if not already done
+
 
         response = {
-            "Fixed Purchasing Power Withdrawal": f"If withdrawing at fixed purchasing power monthly, ${monthly_withdrawal:,.2f} per month can be withdrawn from age {expectedRetirementAge} and increase 3% per year until {lifeExpectancy}. It is equivalent to ${purchasing_power:,.2f} in purchasing power today.",
+            "Retirement Balance Summary": f"At the retirement age of {expectedRetirementAge}, the 401(k) balance will be ${retirement_balance:,.0f}, which is equivalent to ${purchasing_power:,.0f} in purchasing power today.",
+            
+            "Fixed Purchasing Power Withdrawal": f"If withdrawing at fixed purchasing power monthly, ${real_monthly_withdrawal:,.2f} per month can be withdrawn from age {expectedRetirementAge + 1} and increase 3% per year until {lifeExpectancy}. It is equivalent to ${real_monthly_withdrawal / ((1 + inflation_rate) ** years_to_retirement):,.2f} in purchasing power today.",
 
-            "Fixed Amount Monthly Withdrawal": f"If withdrawing at fixed amount monthly, ${deducted_balance:,.2f} per month can be withdrawn in retirement until {lifeExpectancy}. At {expectedRetirementAge}, this is equivalent to ${purchasing_power:,.2f} in purchasing power today, and at {lifeExpectancy}, is equivalent to ${purchasing_power:,.2f}.",
+            "Fixed Amount Monthly Withdrawal": f"If withdrawing at fixed amount monthly, ${nominal_monthly_withdrawal:,.2f} per month can be withdrawn in retirement until {lifeExpectancy}. At {expectedRetirementAge + 1}, this is equivalent to ${pv_nominal_monthly_start:,.2f} in purchasing power today, and at {lifeExpectancy}, is equivalent to ${pv_nominal_monthly_end:,.2f}.",
 
-            "Fixed Amount Annual Withdrawal": f"If withdrawing at fixed amount annually, ${annual_withdrawal:,.2f} per year can be withdrawn in retirement until {lifeExpectancy}. At {age}, this is equivalent to ${purchasing_power:,.2f} in purchasing power today, and at {lifeExpectancy}, is equivalent to ${purchasing_power:,.2f}."
+            "Fixed Amount Annual Withdrawal": f"If withdrawing at fixed amount annually, ${nominal_annual_withdrawal:,.2f} per year can be withdrawn in retirement until {lifeExpectancy}. At {expectedRetirementAge}, this is equivalent to ${pv_nominal_annual_start:,.2f} in purchasing power today, and at {lifeExpectancy}, is equivalent to ${pv_nominal_annual_end:,.2f}."
         }
+
 
         return render_template('index.html', message = response)
 
@@ -118,4 +148,5 @@ def fillBlanks():
         return jsonify({'error': f'An error occurred: {str(e)}'}), 500
 
 if __name__ == '__main__':
-    app.run(host = '0.0.0.0', port= 8080, debug=True)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
